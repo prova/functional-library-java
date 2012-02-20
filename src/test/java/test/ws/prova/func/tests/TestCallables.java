@@ -3,7 +3,9 @@ package test.ws.prova.func.tests;
 import static fj.data.List.list;
 import static org.junit.Assert.assertEquals;
 
+import java.io.IOException;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
@@ -12,6 +14,7 @@ import org.junit.Test;
 
 import ws.prova.func.Callables;
 import ws.prova.func.ParallelStrategy;
+import ws.prova.func.Partial;
 import fj.F;
 import fj.F2;
 import fj.P;
@@ -104,6 +107,27 @@ public class TestCallables {
 
 		assertEquals("Incorrect result of parallel map",
 				"[2.0, 4.0, 6.0, 8.0]", o.toCollection().toString());
+	}
+
+	/**
+	 * Straight parallel map on a fj List with some calls throwing an exception
+	 * 
+	 * @throws Exception
+	 */
+	@Test(expected=IOException.class)
+	public void testParallelMapWithException() throws Exception {
+		// The line below already starts computations using the supplied strategy
+		final Callable<List<Double>> c = ParallelStrategy.parMap(strategy,
+				new Partial<Double, Double, Exception>() {
+					@Override
+					public Double run(final Double a) throws Exception {
+						if( a > 2.0 )
+							throw new IOException("Fake IO exception");
+						return a * 2.0;
+					}
+				}).f(list);
+		// The line below synchronizes the results but blows up with IOException
+		c.call();
 	}
 
 	/**
@@ -216,6 +240,39 @@ public class TestCallables {
 		System.out.println(o.toCollection());
 		assertEquals("Incorrect result of folds inside a parallel map",
 				"[6.0, 4.0, 4.0, 6.0]", o.toCollection().toString());
+	}
+
+	/**
+	 * A nested parallel computation and a fold inside a parallel computation.
+	 * Sums distances between each point and all other points (as used in
+	 * clustering).
+	 * 
+	 * @throws Exception
+	 */
+	@Test(expected=IOException.class)
+	public void testFoldsInsideParallelMapWithException() throws Exception {
+		// A Callables monad version of foldLeft of sum(Double,Double) with seed
+		// 0.0
+		final F<Callable<List<Double>>, Callable<Double>> parFoldLeft = Callables
+				.fmap(List.<Double, Double> foldLeft().f(sum.curry()).f(0.0));
+		final Callable<List<Double>> c = ParallelStrategy.parMapCallable(
+				strategy, new F<Double, Callable<Double>>() {
+					@Override
+					public Callable<Double> f(final Double a) {
+						Callable<List<Double>> c1 = ParallelStrategy.parMap(
+								strategy, new Partial<Double, Double, Exception>() {
+									@Override
+									public Double run(final Double b) throws Exception {
+										if( a > 2.0 )
+											throw new IOException("Fake IO exception");
+										return Math.abs(a - b);
+									}
+								}).f(list);
+						return strategy.par(parFoldLeft).f(c1);
+					}
+				}).f(list);
+		// The line below synchronizes the results but blows up with IOException
+		c.call();
 	}
 
 	@Test

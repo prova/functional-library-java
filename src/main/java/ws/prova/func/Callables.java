@@ -56,6 +56,18 @@ public class Callables {
 		};
 	}
 
+	public static <A, B> F<A, Callable<B>> unit(final Partial<A, B, Exception> f) {
+		return new F<A, Callable<B>>() {
+			public Callable<B> f(final A a) {
+				return new Callable<B>() {
+					public B call() throws Exception {
+						return f.run(a);
+					}
+				};
+			}
+		};
+	}
+
 	/**
 	 * Bind function of the Callable monad with signature Ma->(a->Mb)->Mb. This
 	 * allows us to compose the monadic computations to create infinite

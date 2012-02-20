@@ -1,6 +1,7 @@
 package ws.prova.func;
 
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
@@ -71,7 +72,17 @@ public final class ParallelStrategy<A> {
 	public static <A> Callable<A> obtain(final Future<A> x) {
 		return new Callable<A>() {
 			public A call() throws Exception {
-				return x.get();
+				try {
+					return x.get();
+				} catch( ExecutionException e ) {
+					Throwable th = e.getCause();
+					if( th instanceof Exception )
+						throw (Exception) th;
+					throw e;
+				} catch( InterruptedException e ) {
+					Thread.currentThread().interrupt();
+					throw e;
+				}
 			}
 		};
 	}
@@ -121,6 +132,21 @@ public final class ParallelStrategy<A> {
 		};
 	}
 
+	public static <A, B> F<List<A>, Callable<List<B>>> parMap(
+			final ParallelStrategy<B> s, final Partial<A, B, Exception> f) {
+		return new F<List<A>, Callable<List<B>>>() {
+			@Override
+			public Callable<List<B>> f(final List<A> as) {
+				// The next line already starts the computations in the pool via the chosen strategy
+				final List<Callable<B>> runningList = as.map(Function.compose(
+						s.par(), Callables.unit(f)));
+				// This represents a deferred synchronization of all included computations.
+				// It replaces a horrible Callables.sequence method.
+				return Callables.sequenceCallable(runningList);
+			}
+		};
+	}
+
 	/**
 	 * Function from a list of As to a deferred computation
 	 *    that runs deferred computations {@code F<A,Callable<B>>} over this list of As
@@ -146,6 +172,16 @@ public final class ParallelStrategy<A> {
 
 	public static <A, B> F<List<A>, Callable<List<B>>> parFlatMap(
 			final ParallelStrategy<List<B>> s, final F<A, List<B>> f) {
+		return new F<List<A>, Callable<List<B>>>() {
+			@Override
+			public Callable<List<B>> f(List<A> as) {
+				return Callables.fmap(List.<B> join()).f(parMap(s, f).f(as));
+			}
+		};
+	}
+
+	public static <A, B> F<List<A>, Callable<List<B>>> parFlatMap(
+			final ParallelStrategy<List<B>> s, final Partial<A, List<B>, Exception> f) {
 		return new F<List<A>, Callable<List<B>>>() {
 			@Override
 			public Callable<List<B>> f(List<A> as) {
