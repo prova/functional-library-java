@@ -5,9 +5,9 @@ import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.Test;
@@ -38,7 +38,9 @@ public class TestCallables {
 
 	final ExecutorService s = Executors.newFixedThreadPool(32);
 	final ParallelStrategy<Double> strategy = ParallelStrategy
-			.executorStrategy(s);
+			.executorStrategy(s, 20L);
+	final ParallelStrategy<Double> aggressiveStrategy = ParallelStrategy
+			.executorStrategy(s, 1L);
 	final ParallelStrategy<List<Double>> strategy2 = ParallelStrategy
 			.executorStrategy(s);
 	final F2<Double, Double, Double> sum = new F2<Double, Double, Double>() {
@@ -110,7 +112,7 @@ public class TestCallables {
 	}
 
 	/**
-	 * Straight parallel map on a fj List with some calls throwing an exception
+	 * Straight parallel map on a fj List with some calls throwing a checked exception
 	 * 
 	 * @throws Exception
 	 */
@@ -126,7 +128,31 @@ public class TestCallables {
 						return a * 2.0;
 					}
 				}).f(list);
-		// The line below synchronizes the results but blows up with IOException
+		// The line below synchronizes the results but blows up with an IOException
+		c.call();
+	}
+
+	/**
+	 * Straight parallel map on a fj List with some calls throwing a timeout exception.
+	 * Note that the strategy is configured for a 1 second timeout
+	 * 
+	 * @throws Exception
+	 */
+	@Test(expected=TimeoutException.class)
+	public void testParallelMapWithTimeoutException() throws Exception {
+		// The line below already starts computations using the supplied strategy
+		final Callable<List<Double>> c = ParallelStrategy.parMap(aggressiveStrategy,
+				new Partial<Double, Double, Exception>() {
+					@Override
+					public Double run(final Double a) throws Exception {
+						if( a > 2.0 ) {
+							System.out.println("sleeping...");
+							Thread.sleep(2000L);
+						}
+						return a * 2.0;
+					}
+				}).f(list);
+		// The line below synchronizes the results but blows up with a TimeoutException
 		c.call();
 	}
 
@@ -271,7 +297,7 @@ public class TestCallables {
 						return strategy.par(parFoldLeft).f(c1);
 					}
 				}).f(list);
-		// The line below synchronizes the results but blows up with IOException
+		// The line below synchronizes the results but blows up with an IOException
 		c.call();
 	}
 

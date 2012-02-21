@@ -5,6 +5,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import fj.F;
 import fj.F2;
@@ -13,11 +15,19 @@ import fj.data.List;
 import fj.data.List.Buffer;
 
 public final class ParallelStrategy<A> {
+	
+	private final long timeout;
 
 	private F<Callable<A>, Future<A>> f;
 
 	private ParallelStrategy(final F<Callable<A>, Future<A>> f) {
 		this.f = f;
+		this.timeout = 1;
+	}
+
+	private ParallelStrategy(final F<Callable<A>, Future<A>> f, final long timeout) {
+		this.f = f;
+		this.timeout = timeout;
 	}
 
 	public F<Callable<A>, Future<A>> f() {
@@ -27,6 +37,11 @@ public final class ParallelStrategy<A> {
 	public static <A> ParallelStrategy<A> strategy(
 			final F<Callable<A>, Future<A>> f) {
 		return new ParallelStrategy<A>(f);
+	}
+
+	public static <A> ParallelStrategy<A> strategy(
+			final F<Callable<A>, Future<A>> f, final long timeout) {
+		return new ParallelStrategy<A>(f, timeout);
 	}
 
 	public static <A> ParallelStrategy<A> simpleThreadStrategy() {
@@ -39,6 +54,16 @@ public final class ParallelStrategy<A> {
 		});
 	}
 
+	public static <A> ParallelStrategy<A> simpleThreadStrategy(final long timeout) {
+		return strategy(new F<Callable<A>, Future<A>>() {
+			public Future<A> f(final Callable<A> p) {
+				final FutureTask<A> t = new FutureTask<A>(p);
+				new Thread(t).start();
+				return t;
+			}
+		}, timeout);
+	}
+
 	public static <A> ParallelStrategy<A> executorStrategy(
 			final ExecutorService s) {
 		return strategy(new F<Callable<A>, Future<A>>() {
@@ -46,6 +71,15 @@ public final class ParallelStrategy<A> {
 				return s.submit(p);
 			}
 		});
+	}
+
+	public static <A> ParallelStrategy<A> executorStrategy(
+			final ExecutorService s, final long timeout) {
+		return strategy(new F<Callable<A>, Future<A>>() {
+			public Future<A> f(final Callable<A> p) {
+				return s.submit(p);
+			}
+		}, timeout);
 	}
 
 	public <B> F<B, Future<A>> lift(final F<B, A> f) {
@@ -61,7 +95,7 @@ public final class ParallelStrategy<A> {
 		};
 	}
 
-	public static <A> F<Future<A>, Callable<A>> obtain() {
+	public F<Future<A>, Callable<A>> obtain() {
 		return new F<Future<A>, Callable<A>>() {
 			public Callable<A> f(final Future<A> t) {
 				return obtain(t);
@@ -69,11 +103,20 @@ public final class ParallelStrategy<A> {
 		};
 	}
 
-	public static <A> Callable<A> obtain(final Future<A> x) {
+	public F<Future<A>, Callable<A>> obtainThrower() {
+		return new F<Future<A>, Callable<A>>() {
+			public Callable<A> f(final Future<A> t) {
+				return obtain(t);
+			}
+		};
+	}
+
+	public Callable<A> obtain(final Future<A> x) {
 		return new Callable<A>() {
 			public A call() throws Exception {
 				try {
-					return x.get();
+					// A timeout would throw an exception 
+					return x.get(timeout, TimeUnit.SECONDS);
 				} catch( ExecutionException e ) {
 					Throwable th = e.getCause();
 					if( th instanceof Exception )
@@ -217,7 +260,7 @@ public final class ParallelStrategy<A> {
 	}
 
 	public F<Callable<A>, Callable<A>> par() {
-		return Function.compose(ParallelStrategy.<A> obtain(), f());
+		return Function.compose(obtain(), f());
 	}
 
 	/**
@@ -231,5 +274,13 @@ public final class ParallelStrategy<A> {
 	public <B> F<B, Callable<A>> par(final F<B, Callable<A>> f) {
 		return Function.compose(par(), f);
 	}
+
+//	public F<Callable<Thrower<A, Exception>>, Callable<Thrower<A, Exception>>> parThrower() {
+//		return Function.compose(obtain(), f());
+//	}
+//
+//	public <B> F<B, Callable<A>> parThrower(final F<B, Callable<A>> f) {
+//		return Function.compose(par(), f);
+//	}
 
 }
