@@ -13,6 +13,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Test;
 
 import ws.prova.func.Callables;
+import ws.prova.func.ConversationPool;
+import ws.prova.func.ConversationStrategy;
 import ws.prova.func.ParallelStrategy;
 import ws.prova.func.Partial;
 import fj.F;
@@ -89,6 +91,32 @@ public class TestCallables {
 	}
 
 	/**
+	 * EXPERIMENTAL: Conversation-based parallel map on a fj List
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public void testConversationParallelMap() throws Exception {
+		ConversationPool<Double> xp = new ConversationPool<Double>();
+		final ConversationStrategy<Double> conversationStrategy = ConversationStrategy
+				.<Double> strategy(xp);
+		// The line below already starts computations using the supplied strategy
+		final Callable<List<Double>> c = ParallelStrategy.parMap(strategy,
+				new F<Double, Double>() {
+					@Override
+					public Double f(final Double a) {
+						return a * 2.0;
+					}
+				}).f(list);
+		// The line below synchronizes the results and copies them all into the list of results
+		List<Double> o = c.call();
+		System.out.println(o.toCollection());
+
+		assertEquals("Incorrect result of parallel map",
+				"[2.0, 4.0, 6.0, 8.0]", o.toCollection().toString());
+	}
+
+	/**
 	 * Straight parallel map on a fj List
 	 * 
 	 * @throws Exception
@@ -133,7 +161,7 @@ public class TestCallables {
 	}
 
 	/**
-	 * Straight parallel map on a fj List with some calls throwing a timeout exception.
+	 * Straight parallel map on a fj List with some calls running too long, which results in a a TimeoutException.
 	 * Note that the strategy is configured for a 1 second timeout
 	 * 
 	 * @throws Exception
