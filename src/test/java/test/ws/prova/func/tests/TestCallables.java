@@ -584,6 +584,47 @@ public class TestCallables {
 	}
 
 	/**
+	 * Straight Promise-based parallel map on a fj List.
+	 * This actually DOES NOT work beyond fairly modest list lengths.
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public void testPerformancePromiseParallelMap2() throws Exception {
+		final List<Double> longList = List.unfold(
+				new F<Double, Option<P2<Double, Double>>>() {
+					@Override
+					public Option<P2<Double, Double>> f(Double a) {
+						return a < 100001.0 ? Option.some(P.p(a, a + 1.0))
+								: Option.<P2<Double, Double>> none();
+					}
+				}, 1.0);
+		assertEquals("Incorrect generated list length", 100000,
+				longList.length());
+		// final long startTimeNanos = System.nanoTime ( ) ;
+//		final AtomicLong count = new AtomicLong(0);
+		final Strategy<Unit> strategy = Strategy.executorStrategy(Executors
+				.newFixedThreadPool(32));
+		final Promise<List<Double>> c = ParModule.parModule(strategy).parMap(
+				longList, new F<Double, Double>() {
+					@Override
+					public Double f(final Double a) {
+//						long n = count.incrementAndGet();
+//						if (n % 1000 == 0)
+//							System.out.println(n);
+						double result = 0.0;
+						for( int i=0; i<1000; i++ )
+							result += Math.expm1(Math.abs(a * 2.0));
+						return result;
+					}
+				});
+		List<Double> o = c.claim(); // 5L,TimeUnit.SECONDS);
+		System.out.println(o.length());
+
+		assertEquals("Incorrect result of parallel map", 100000, o.length());
+	}
+
+	/**
 	 * Straight parallel map on a fj List
 	 * 
 	 * @throws Exception
@@ -809,5 +850,44 @@ public class TestCallables {
 
 		assertEquals("Incorrect result of parallel map", 100, o.length());
 	}
+
+	@Test
+    public void testPerformanceParallelMap4() throws Exception {
+
+        long x = System.currentTimeMillis();
+
+        final List<Double> longList = List.unfold(
+                new F<Double, Option<P2<Double, Double>>>() {
+                    @Override
+                    public Option<P2<Double, Double>> f(Double a) {
+                        return a < 1001.0 ? Option.some(P.p(a, a + 1.0))
+                                : Option.<P2<Double, Double>> none();
+                    }
+                }, 1.0);
+        assertEquals("Incorrect generated list length", 1000,
+                longList.length());
+//        final AtomicLong count = new AtomicLong(0);
+        // Here Double is the target type of function f
+        final F<List<Double>, Callable<List<Double>>> parMap = ParallelStrategy
+                .parMap(strategy, new F<Double, Double>() {
+                    @Override
+                    public Double f(final Double a) {
+                        //long n = count.incrementAndGet();
+                        /*if (n % 1000 == 0)
+                            System.out.println(n);*/
+                        double result = 0.0;
+                        for( int i=0; i<1000000; i++ )
+                            result += Math.cosh(a * 2.0);
+                        return result;
+                    }
+                });
+        final Callable<List<Double>> c = parMap.f(longList);
+        List<Double> o = c.call();
+        System.out.println(o.length());
+
+        assertEquals("Incorrect result of parallel map", 1000, o.length());
+
+        System.out.println(System.currentTimeMillis() - x);
+    }
 
 }
