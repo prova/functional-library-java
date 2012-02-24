@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -21,7 +22,7 @@ public class ConversationPool<A> {
 			final int index = i;
 			this.partitionedPool[i] =
 				new ThreadPoolExecutor(1, 1,
-					    0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueueWithPut<Runnable>(8192),
+					    0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueueWithPut<Runnable>(81920),
 					new ThreadFactory() {
 
 						public Thread newThread(Runnable r) {
@@ -36,8 +37,8 @@ public class ConversationPool<A> {
 		}
 	}
 
-	public void submit( Callable<A> task ) {
-		
+	public Future<A> submit( final Long xid, final Callable<A> task ) {
+		return partitionedPool[(int) (xid % partitionedPool.length)].submit(task);
 	}
 	
 	private class ArrayBlockingQueueWithPut<E> extends ArrayBlockingQueue<E> {

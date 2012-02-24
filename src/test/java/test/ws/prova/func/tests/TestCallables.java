@@ -5,6 +5,7 @@ import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeoutException;
@@ -17,8 +18,10 @@ import ws.prova.func.ConversationPool;
 import ws.prova.func.ConversationStrategy;
 import ws.prova.func.ParallelStrategy;
 import ws.prova.func.Partial;
+import fj.Effect;
 import fj.F;
 import fj.F2;
+import fj.F3;
 import fj.P;
 import fj.P2;
 import fj.Unit;
@@ -100,20 +103,167 @@ public class TestCallables {
 		ConversationPool<Double> xp = new ConversationPool<Double>();
 		final ConversationStrategy<Double> conversationStrategy = ConversationStrategy
 				.<Double> strategy(xp);
-		// The line below already starts computations using the supplied strategy
-		final Callable<List<Double>> c = ParallelStrategy.parMap(strategy,
+		final CountDownLatch latch = new CountDownLatch(1);
+		final F3<Long, List<Double>, Effect<List<Double>>, Callable<List<Double>>> c
+			= ConversationStrategy.parMap(conversationStrategy,
 				new F<Double, Double>() {
 					@Override
 					public Double f(final Double a) {
 						return a * 2.0;
 					}
-				}).f(list);
-		// The line below synchronizes the results and copies them all into the list of results
-		List<Double> o = c.call();
-		System.out.println(o.toCollection());
+				});
+		c.f(1L,list,new Effect<List<Double>>() {
+					@Override
+					public void e(List<Double> o) {
+						System.out.println(o.toCollection());
 
-		assertEquals("Incorrect result of parallel map",
-				"[2.0, 4.0, 6.0, 8.0]", o.toCollection().toString());
+						assertEquals("Incorrect result of parallel map",
+								"[2.0, 4.0, 6.0, 8.0]", o.toCollection().toString());
+						latch.countDown();
+					}});
+		latch.await();
+		System.out.println("Done");
+	}
+
+	/**
+	 * EXPERIMENTAL: Performance of a conversation-based parallel map on a fj List
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public void testPerformanceConversationParallelMap() throws Exception {
+		final List<Double> longList = List.unfold(
+				new F<Double, Option<P2<Double, Double>>>() {
+					@Override
+					public Option<P2<Double, Double>> f(Double a) {
+						return a < 1000001.0 ? Option.some(P.p(a, a + 1.0))
+								: Option.<P2<Double, Double>> none();
+					}
+				}, 1.0);
+		assertEquals("Incorrect generated list length", 1000000,
+				longList.length());
+//		final AtomicLong count = new AtomicLong(0);
+		ConversationPool<Double> xp = new ConversationPool<Double>();
+		final ConversationStrategy<Double> conversationStrategy = ConversationStrategy
+				.<Double> strategy(xp);
+		final CountDownLatch latch = new CountDownLatch(1);
+		final F3<Long, List<Double>, Effect<List<Double>>, Callable<List<Double>>> c
+			= ConversationStrategy.parMap(conversationStrategy,
+				new F<Double, Double>() {
+					@Override
+					public Double f(final Double a) {
+//						long n = count.incrementAndGet();
+						double result = 0.0;
+						for( int i=0; i<1000; i++ )
+							result += Math.expm1(Math.abs(a * 2.0));
+//						if (n % 10 == 0)
+//							System.out.println(n+Thread.currentThread().getName());
+						return result;
+					}
+				});
+		c.f(0L,longList,new Effect<List<Double>>() {
+					@Override
+					public void e(List<Double> o) {
+						System.out.println(o.length());
+
+						assertEquals("Incorrect result of parallel map", 1000000, o.length());
+						latch.countDown();
+					}});
+		latch.await();
+	}
+
+	/**
+	 * EXPERIMENTAL: Performance of a conversation-based parallel map on a fj List
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public void testPerformanceConversationParallelMap2() throws Exception {
+		final List<Double> longList = List.unfold(
+				new F<Double, Option<P2<Double, Double>>>() {
+					@Override
+					public Option<P2<Double, Double>> f(Double a) {
+						return a < 1001.0 ? Option.some(P.p(a, a + 1.0))
+								: Option.<P2<Double, Double>> none();
+					}
+				}, 1.0);
+		assertEquals("Incorrect generated list length", 1000,
+				longList.length());
+//		final AtomicLong count = new AtomicLong(0);
+		ConversationPool<Double> xp = new ConversationPool<Double>();
+		final ConversationStrategy<Double> conversationStrategy = ConversationStrategy
+				.<Double> strategy(xp);
+		final CountDownLatch latch = new CountDownLatch(1);
+		final F3<Long, List<Double>, Effect<List<Double>>, Callable<List<Double>>> c
+			= ConversationStrategy.parMap(conversationStrategy,
+				new F<Double, Double>() {
+					@Override
+					public Double f(final Double a) {
+//						long n = count.incrementAndGet();
+						double result = 0.0;
+						for( int i=0; i<1000000; i++ )
+							result += Math.expm1(Math.abs(a * 2.0));
+//						if (n % 10 == 0)
+//							System.out.println(n+Thread.currentThread().getName());
+						return result;
+					}
+				});
+		c.f(0L,longList,new Effect<List<Double>>() {
+					@Override
+					public void e(List<Double> o) {
+						System.out.println(o.length());
+
+						assertEquals("Incorrect result of parallel map", 1000, o.length());
+						latch.countDown();
+					}});
+		latch.await();
+	}
+
+	/**
+	 * EXPERIMENTAL: Performance of a conversation-based parallel map on a fj List
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public void testPerformanceConversationParallelMap3() throws Exception {
+		final List<Double> longList = List.unfold(
+				new F<Double, Option<P2<Double, Double>>>() {
+					@Override
+					public Option<P2<Double, Double>> f(Double a) {
+						return a < 101.0 ? Option.some(P.p(a, a + 1.0))
+								: Option.<P2<Double, Double>> none();
+					}
+				}, 1.0);
+		assertEquals("Incorrect generated list length", 100,
+				longList.length());
+//		final AtomicLong count = new AtomicLong(0);
+		ConversationPool<Double> xp = new ConversationPool<Double>();
+		final ConversationStrategy<Double> conversationStrategy = ConversationStrategy
+				.<Double> strategy(xp);
+		final CountDownLatch latch = new CountDownLatch(1);
+		final F3<Long, List<Double>, Effect<List<Double>>, Callable<List<Double>>> c
+			= ConversationStrategy.parMap(conversationStrategy,
+				new F<Double, Double>() {
+					@Override
+					public Double f(final Double a) {
+//						long n = count.incrementAndGet();
+						double result = 0.0;
+						for( int i=0; i<10000000; i++ )
+							result += Math.expm1(Math.abs(a * 2.0));
+//						if (n % 10 == 0)
+//							System.out.println(n+Thread.currentThread().getName());
+						return result;
+					}
+				});
+		c.f(0L,longList,new Effect<List<Double>>() {
+					@Override
+					public void e(List<Double> o) {
+						System.out.println(o.length());
+
+						assertEquals("Incorrect result of parallel map", 100, o.length());
+						latch.countDown();
+					}});
+		latch.await();
 	}
 
 	/**
@@ -411,19 +561,19 @@ public class TestCallables {
 		assertEquals("Incorrect generated list length", 20000,
 				longList.length());
 		// final long startTimeNanos = System.nanoTime ( ) ;
-		final AtomicLong count = new AtomicLong(0);
+//		final AtomicLong count = new AtomicLong(0);
 		final Strategy<Unit> strategy = Strategy.executorStrategy(Executors
 				.newFixedThreadPool(32));
 		final Promise<List<Double>> c = ParModule.parModule(strategy).parMap(
 				longList, new F<Double, Double>() {
 					@Override
 					public Double f(final Double a) {
-						long n = count.incrementAndGet();
-						if (n % 1000 == 0)
-							System.out.println(n);
+//						long n = count.incrementAndGet();
+//						if (n % 1000 == 0)
+//							System.out.println(n);
 						double result = 0.0;
 						for( int i=0; i<1000; i++ )
-							result += Math.expm1(Math.cosh(a * 2.0));
+							result += Math.expm1(Math.abs(a * 2.0));
 						return result;
 					}
 				});
@@ -450,18 +600,18 @@ public class TestCallables {
 				}, 1.0);
 		assertEquals("Incorrect generated list length", 1000000,
 				longList.length());
-		final AtomicLong count = new AtomicLong(0);
+//		final AtomicLong count = new AtomicLong(0);
 		// Here Double is the target type of function f
 		final F<List<Double>, Callable<List<Double>>> parMap = ParallelStrategy
 				.parMap(strategy, new F<Double, Double>() {
 					@Override
 					public Double f(final Double a) {
-						long n = count.incrementAndGet();
-						if (n % 1000 == 0)
-							System.out.println(n);
+//						long n = count.incrementAndGet();
+//						if (n % 10000 == 0)
+//							System.out.println(n);
 						double result = 0.0;
 						for( int i=0; i<1000; i++ )
-							result += Math.expm1(Math.cosh(a * 2.0));
+							result += Math.expm1(Math.abs(a * 2.0));
 						return result;
 					}
 				});
@@ -489,17 +639,17 @@ public class TestCallables {
 				}, 1.0);
 		assertEquals("Incorrect generated list length", 1000000,
 				longList.length());
-		final AtomicLong count = new AtomicLong(0);
+//		final AtomicLong count = new AtomicLong(0);
 		// Here Double is the target type of function f
 		final List<Double> o = longList.map(new F<Double, Double>() {
 					@Override
 					public Double f(final Double a) {
-						long n = count.incrementAndGet();
-						if (n % 1000 == 0)
-							System.out.println(n);
+//						long n = count.incrementAndGet();
+//						if (n % 10000 == 0)
+//							System.out.println(n);
 						double result = 0.0;
 						for( int i=0; i<1000; i++ )
-							result += Math.expm1(Math.cosh(a * 2.0));
+							result += Math.expm1(Math.abs(a * 2.0));
 						return result;
 					}
 				});
@@ -525,18 +675,18 @@ public class TestCallables {
 				}, 1.0);
 		assertEquals("Incorrect generated list length", 1000,
 				longList.length());
-		final AtomicLong count = new AtomicLong(0);
+//		final AtomicLong count = new AtomicLong(0);
 		// Here Double is the target type of function f
 		final F<List<Double>, Callable<List<Double>>> parMap = ParallelStrategy
 				.parMap(strategy, new F<Double, Double>() {
 					@Override
 					public Double f(final Double a) {
-						long n = count.incrementAndGet();
-						if (n % 1000 == 0)
-							System.out.println(n);
+//						long n = count.incrementAndGet();
+//						if (n % 1000 == 0)
+//							System.out.println(n);
 						double result = 0.0;
 						for( int i=0; i<1000000; i++ )
-							result += Math.expm1(Math.cosh(a * 2.0));
+							result += Math.expm1(Math.abs(a * 2.0));
 						return result;
 					}
 				});
@@ -565,17 +715,17 @@ public class TestCallables {
 				}, 1.0);
 		assertEquals("Incorrect generated list length", 1000,
 				longList.length());
-		final AtomicLong count = new AtomicLong(0);
+//		final AtomicLong count = new AtomicLong(0);
 		// Here Double is the target type of function f
 		final List<Double> o = longList.map(new F<Double, Double>() {
 					@Override
 					public Double f(final Double a) {
-						long n = count.incrementAndGet();
-						if (n % 1000 == 0)
-							System.out.println(n);
+//						long n = count.incrementAndGet();
+//						if (n % 1000 == 0)
+//							System.out.println(n);
 						double result = 0.0;
 						for( int i=0; i<1000000; i++ )
-							result += Math.expm1(Math.cosh(a * 2.0));
+							result += Math.expm1(Math.abs(a * 2.0));
 						return result;
 					}
 				});
@@ -601,18 +751,18 @@ public class TestCallables {
 				}, 1.0);
 		assertEquals("Incorrect generated list length", 100,
 				longList.length());
-		final AtomicLong count = new AtomicLong(0);
+//		final AtomicLong count = new AtomicLong(0);
 		// Here Double is the target type of function f
 		final F<List<Double>, Callable<List<Double>>> parMap = ParallelStrategy
 				.parMap(strategy, new F<Double, Double>() {
 					@Override
 					public Double f(final Double a) {
-						long n = count.incrementAndGet();
-						if (n % 1000 == 0)
-							System.out.println(n);
+//						long n = count.incrementAndGet();
+//						if (n % 1000 == 0)
+//							System.out.println(n);
 						double result = 0.0;
 						for( int i=0; i<10000000; i++ )
-							result += Math.expm1(Math.cosh(a * 2.0));
+							result += Math.expm1(Math.abs(a * 2.0));
 						return result;
 					}
 				});
@@ -641,17 +791,17 @@ public class TestCallables {
 				}, 1.0);
 		assertEquals("Incorrect generated list length", 100,
 				longList.length());
-		final AtomicLong count = new AtomicLong(0);
+//		final AtomicLong count = new AtomicLong(0);
 		// Here Double is the target type of function f
 		final List<Double> o = longList.map(new F<Double, Double>() {
 					@Override
 					public Double f(final Double a) {
-						long n = count.incrementAndGet();
-						if (n % 1000 == 0)
-							System.out.println(n);
+//						long n = count.incrementAndGet();
+//						if (n % 1000 == 0)
+//							System.out.println(n);
 						double result = 0.0;
 						for( int i=0; i<10000000; i++ )
-							result += Math.expm1(Math.cosh(a * 2.0));
+							result += Math.expm1(Math.abs(a * 2.0));
 						return result;
 					}
 				});
