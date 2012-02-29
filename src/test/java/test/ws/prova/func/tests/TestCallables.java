@@ -25,9 +25,9 @@ import fj.F3;
 import fj.P;
 import fj.P2;
 import fj.Unit;
-import fj.control.parallel.ParModule;
-import fj.control.parallel.Promise;
-import fj.control.parallel.Strategy;
+import fj.control.parallel2.ParModule;
+import fj.control.parallel2.Promise;
+import fj.control.parallel2.Strategy;
 import fj.data.List;
 import fj.data.Option;
 
@@ -591,7 +591,7 @@ public class TestCallables {
 
 	/**
 	 * Straight Promise-based parallel map on a fj List.
-	 * This actually DOES NOT work beyond fairly modest list lengths.
+	 * This actually DOES NOT work in fj 3.0 beyond fairly modest list lengths.
 	 * 
 	 * @throws Exception
 	 */
@@ -632,21 +632,23 @@ public class TestCallables {
 
 	/**
 	 * Straight Promise-based parallel map on a fj List.
-	 * This actually DOES NOT work beyond fairly modest list lengths.
+	 * This actually DOES NOT work in fj 3.0 beyond fairly modest list lengths.
+	 * In the modified fj, it works slower than the Callables based approach and requires
+	 * -Xmx1536m to run. 
 	 * 
 	 * @throws Exception
 	 */
-//	@Test
+//	@Test // Set -Xmx1536m to run
 	public void testPerformancePromiseParallelMap2() throws Exception {
 		final List<Double> longList = List.unfold(
 				new F<Double, Option<P2<Double, Double>>>() {
 					@Override
 					public Option<P2<Double, Double>> f(Double a) {
-						return a < 100001.0 ? Option.some(P.p(a, a + 1.0))
+						return a < 1000001.0 ? Option.some(P.p(a, a + 1.0))
 								: Option.<P2<Double, Double>> none();
 					}
 				}, 1.0);
-		assertEquals("Incorrect generated list length", 100000,
+		assertEquals("Incorrect generated list length", 1000000,
 				longList.length());
 		// final long startTimeNanos = System.nanoTime ( ) ;
 		final AtomicLong count = new AtomicLong(0);
@@ -657,7 +659,7 @@ public class TestCallables {
 					@Override
 					public Double f(final Double a) {
 						long n = count.incrementAndGet();
-						if (n % 1000 == 0)
+						if (n % 10000 == 0)
 							System.out.println(n);
 						double result = 0.0;
 						for( int i=0; i<1000; i++ )
@@ -665,15 +667,16 @@ public class TestCallables {
 						return result;
 					}
 				});
-		// This call takes a very long time
-		List<Double> o = c.claim(); // 5L,TimeUnit.SECONDS);
+		// This call takes a very long time in fj 3.0
+		List<Double> o = c.claim();
 		System.out.println(o.length());
 
-		assertEquals("Incorrect result of parallel map", 100000, o.length());
+		assertEquals("Incorrect result of parallel map", 1000000, o.length());
 	}
 
 	/**
-	 * Straight parallel map on a fj List
+	 * Straight parallel map on a fj List.
+	 * Requires -Xmx256m to run.
 	 * 
 	 * @throws Exception
 	 */
